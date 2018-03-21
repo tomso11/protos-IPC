@@ -121,12 +121,14 @@ static int startParent() {
 
     int max_fd = -1;
 
-    safeFdSet(STDIN_FILENO, &readSet, &max_fd);
+
+    //deberiamos anotarnos depende de la condicion, no ?
+   /* safeFdSet(STDIN_FILENO, &readSet, &max_fd);
     safeFdSet(pipeFromChild[0], &readSet, &max_fd);
 
     safeFdSet(STDOUT_FILENO, &writeSet, &max_fd);
     safeFdSet(pipeToChild[1], &writeSet, &max_fd);
-
+*/
     uint8_t buffin[4096] = {0}, buffout[4096] = {0};
     buffer bin, bou;
     buffer_init(bin, sizeof(buffin)/sizeof(*buffin), buffin);
@@ -143,24 +145,41 @@ static int startParent() {
 
         int bytesRead = 0;
 
-        if ( FD_ISSET(STDIN_FILENO, &readSetBackup) && buffer_can_write ) {
+
+        // Nos inscribimos segun las condiciones
+        if( STDIN_FILENO =! -1 && buffer_can_write ) {
+            safeFdSet( STDIN_FILENO, &readSet);
+        }
+
+        if( pipeFromChild[0] =! -1 && buffer_can_write ) {
+            safeFdSet( pipeFromChild[0], &readSet);
+        }
+
+        if( STDOUT_FILENO =! -1 && buffer_can_read ) {
+            safeFdSet( STDOUT_FILENO, &readSet);
+        }
+
+        if( pipeToChild[1] =! -1 && buffer_can_write ) {
+            safeFdSet( pipeToChild[1], &readSet);
+        }
+
+        //handlers por si alguno esta disponible
+        if ( FD_ISSET(STDIN_FILENO, &readSetBackup) ) {
 
             // Close unused ends of pipes
             close(pipeToChild[0]);
             close(pipeFromChild[1]);
 
             bytesRead = handleReadStdIn();
-
-            if (FD_ISSET(pipeToChild[1], &writeSetBackup)) {
-
-                handleWritePipeToChild(bytesRead);
-
-                close(pipeToChild[1]);
-
-            }
-
         }
 
+        if (FD_ISSET(pipeToChild[1], &writeSetBackup)) {
+
+            handleWritePipeToChild(bytesRead);
+
+            close(pipeToChild[1]);
+
+        }
 
         if (FD_ISSET(pipeFromChild[0], &readSetBackup)) {
 
