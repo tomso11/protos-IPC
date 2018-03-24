@@ -20,26 +20,31 @@ char buf[BUFF_SIZE] = "";
 
 unsigned char inParity = 0, outParity = 0;
 
-static int calcParity( const char * string, const int size ) {
+static int calcParity( struct buffer * buff, const int size ) {
     unsigned char b = 0;
     int i;
+    size_t * read_bytes;
 
-    for ( i = 0 ; i < size ; i++ ) {
-        b ^= string[i];
+    buffer_read_ptr( buff, read_bytes );
+
+    for ( i = 0 ; i < *read_bytes ; i++ ) {
+        b^= buffer_read(buff);    
     }
 
     return b;
 }
 
-static int handleReadStdIn() {
+static int handleReadStdIn(struct buffer * buff) {
 
     int bytesRead = 0;
 
-    bytesRead = read(STDIN_FILENO, buf, sizeof(buf));
+    size_t * bytes;
+
+    bytesRead = read(STDIN_FILENO, buffer_write_ptr(buff, bytes), *bytes);
 
     if (bytesRead > 0) {
 
-        inParity ^= calcParity(buf, bytesRead);
+        inParity ^= calcParity(buff, bytesRead);
 
     } else {
 
@@ -50,21 +55,23 @@ static int handleReadStdIn() {
     return bytesRead;
 }
 
-static int handleReadPipeFromChild() {
+static int handleReadPipeFromChild(struct buffer * buff) {
 
     // Empty buffer
-    memset(buf, 0, sizeof(buf));
+    // memset(buf, 0, sizeof(buf));
 
     int bytesRead = 0;
 
+    size_t * bytes;
+
     // Read response from child
-    bytesRead = read(pipeFromChild[0], buf, sizeof(buf));
+    bytesRead = read(pipeFromChild[0], buffer_write_ptr(buff, bytes), *bytes) ;
 
     if (bytesRead > 0) {
 
-        outParity ^= calcParity(buf, bytesRead);
+        outParity ^= calcParity(buff, bytesRead);
 
-        fprintf(stderr, "Read from child: %s", buf);
+        fprintf(stderr, "Read from child: %d\n", ((int)*bytes));
 
     } else if (bytesRead == 0) {
 
@@ -80,10 +87,12 @@ static int handleReadPipeFromChild() {
     return bytesRead;
 }
 
-static void handleWritePipeToChild(int bytesRead) {
+static void handleWritePipeToChild(struct buffer * buff) {
 
-    if (write(pipeToChild[1], buf, bytesRead) > 0) {
-        printf("Wrote to child: %s\n", buf);
+    size_t * write_bytes;
+
+    if ( write(pipeToChild[1], buffer_read_ptr( buff, write_bytes ), *write_bytes ) > 0 ) {
+        printf("Wrote to child: %d bytes\n", ((int)*write_bytes));
     }
 
 }
@@ -141,7 +150,6 @@ static int startParent() {
     fd_set writeSetBackup = writeSet;
 
     do {
-
         fflush(stdout);
 
         int bytesRead = 0;
@@ -156,15 +164,17 @@ static int startParent() {
             safeFdSet( pipeFromChild[0], &readSet, &max_fd);
         }
 
-        if( STDOUT_FILENO != -1 && buffer_can_read(&bin) ) {
-            safeFdSet( STDOUT_FILENO, &writeSet, &max_fd);
-        }
-
-        if( pipeToChild[1] != -1 && buffer_can_write(&bou) ) {
+        if( pipeToChild[1] != -1 && buffer_can_read(&bin) ) {
             safeFdSet( pipeToChild[1], &writeSet, &max_fd);
         }
 
+        if( STDOUT_FILENO != -1 && buffer_can_read(&bou) ) {
+            safeFdSet( STDOUT_FILENO, &writeSet, &max_fd);
+        }
+
+
         n = select(max_fd + 1, &readSet, &writeSet, NULL, NULL);
+        //printf("WTF :\n select: %d\n Pipes: STDIN %d STDOUT %d CHIN %d CHOUT %d \n", n, STDIN_FILENO, STDOUT_FILENO, pipeFromChild[0], pipeToChild[1] );
 
         //handlers por si alguno esta disponible
         if ( FD_ISSET(STDIN_FILENO, &readSetBackup) ) {
@@ -173,12 +183,12 @@ static int startParent() {
             //close(pipeToChild[0]);
             //close(pipeFromChild[1]);
 
-            bytesRead = handleReadStdIn();
+            bytesRead = handleReadStdIn(&bin);
         }
 
         if (FD_ISSET(pipeToChild[1], &writeSetBackup)) {
 
-            handleWritePipeToChild(bytesRead);
+            handleWritePipeToChild(&bin);
 
             close(pipeToChild[1]);
 
@@ -186,7 +196,7 @@ static int startParent() {
 
         if (FD_ISSET(pipeFromChild[0], &readSetBackup)) {
 
-            handleReadPipeFromChild();
+            handleReadPipeFromChild(&bou);
         }
 
         if (FD_ISSET(STDOUT_FILENO, &writeSetBackup)) {
@@ -249,6 +259,7 @@ static void setUpPipes() {
 }
 
 // Test with: clear && clang  -Weverything ejIPC.c -o ejIPC && echo -n hola | pv | ./ejIPC "sed s/o/0/g| sed s/a/4/g"
+// Linux GCC : gcc -c ejIPC-4.c buffer.c buffer.h ; gcc -o ejipc ejIPC-4.o buffer.o
 int main(int argc, char** argv) {
 
     int pid;
