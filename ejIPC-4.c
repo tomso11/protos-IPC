@@ -9,7 +9,7 @@
 #include <assert.h>
 
 //JUAN
-#include <buffer.h>
+#include "buffer.h"
 
 #define BUFF_SIZE 256
 
@@ -120,6 +120,7 @@ static int startParent() {
     FD_ZERO(&writeSet);
 
     int max_fd = -1;
+    int n;
 
 
     //deberiamos anotarnos depende de la condicion, no ?
@@ -130,16 +131,16 @@ static int startParent() {
     safeFdSet(pipeToChild[1], &writeSet, &max_fd);
 */
     uint8_t buffin[4096] = {0}, buffout[4096] = {0};
-    buffer bin, bou;
-    buffer_init(bin, sizeof(buffin)/sizeof(*buffin), buffin);
-    buffer_init(bou, sizeof(buffout)/sizeof(*buffout), buffout);
+    struct buffer bin, bou;
+    buffer_init(&bin, sizeof(buffin)/sizeof(*buffin), buffin);
+    buffer_init(&bou, sizeof(buffout)/sizeof(*buffout), buffout);
 
     int available = 0;
 
     fd_set readSetBackup = readSet;
     fd_set writeSetBackup = writeSet;
 
-    while ( select(max_fd + 1, &readSet, &writeSet, NULL, NULL) != -1 ) {
+    do {
 
         fflush(stdout);
 
@@ -147,28 +148,30 @@ static int startParent() {
 
 
         // Nos inscribimos segun las condiciones
-        if( STDIN_FILENO =! -1 && buffer_can_write ) {
-            safeFdSet( STDIN_FILENO, &readSet);
+        if( STDIN_FILENO != -1 && buffer_can_write(&bin) ) {
+            safeFdSet( STDIN_FILENO, &readSet, &max_fd);
         }
 
-        if( pipeFromChild[0] =! -1 && buffer_can_write ) {
-            safeFdSet( pipeFromChild[0], &readSet);
+        if( pipeFromChild[0] != -1 && buffer_can_write(&bou) ) {
+            safeFdSet( pipeFromChild[0], &readSet, &max_fd);
         }
 
-        if( STDOUT_FILENO =! -1 && buffer_can_read ) {
-            safeFdSet( STDOUT_FILENO, &readSet);
+        if( STDOUT_FILENO != -1 && buffer_can_read(&bin) ) {
+            safeFdSet( STDOUT_FILENO, &writeSet, &max_fd);
         }
 
-        if( pipeToChild[1] =! -1 && buffer_can_write ) {
-            safeFdSet( pipeToChild[1], &readSet);
+        if( pipeToChild[1] != -1 && buffer_can_write(&bou) ) {
+            safeFdSet( pipeToChild[1], &writeSet, &max_fd);
         }
+
+        n = select(max_fd + 1, &readSet, &writeSet, NULL, NULL);
 
         //handlers por si alguno esta disponible
         if ( FD_ISSET(STDIN_FILENO, &readSetBackup) ) {
 
             // Close unused ends of pipes
-            close(pipeToChild[0]);
-            close(pipeFromChild[1]);
+            //close(pipeToChild[0]);
+            //close(pipeFromChild[1]);
 
             bytesRead = handleReadStdIn();
         }
@@ -186,17 +189,35 @@ static int startParent() {
             handleReadPipeFromChild();
         }
 
+        if (FD_ISSET(STDOUT_FILENO, &writeSetBackup)) {
+            // Is it ok ?
+            fprintf(stderr, "In parity: %#X\nOut parity: %#X\n", inParity, outParity);
+        }
+
+        // If you can't read, do not write
+        if ( -1 == STDIN_FILENO && -1 != pipeToChild[1] && !buffer_can_read(&bin) ){
+            close( pipeToChild[1] );
+            pipeToChild[1] = -1;
+        }
+
+        if ( -1 == pipeFromChild[0] && -1 != STDOUT_FILENO && !buffer_can_read(&bou) ){
+            close( STDOUT_FILENO );
+        }
+
+        // return if every operation is finished
+        if ( STDIN_FILENO == -1 && pipeFromChild[0] == -1
+            && pipeToChild[1] == -1 && STDOUT_FILENO == -1){
+            return 0;
+        }
+
         fd_set readSetBackup = readSet;
         fd_set writeSetBackup = writeSet;
 
     }
-
-    // Print to stderr
-    fprintf(stderr, "In parity: %#X\nOut parity: %#X\n", inParity, outParity);
+    while ( n != -1 );
 
     wait(NULL);
 
-    return 0;
 }
 
 static void startChild(char * command) {
@@ -205,6 +226,7 @@ static void startChild(char * command) {
     close(pipeFromChild[0]);
 
     // Duplicate ends of pipes to stdin and stdout
+    // Connect child stdin and stdout to parent pipes
     dup2(pipeToChild[0], fileno(stdin));
     dup2(pipeFromChild[1], fileno(stdout));
 
@@ -230,6 +252,14 @@ static void setUpPipes() {
 int main(int argc, char** argv) {
 
     int pid;
+
+    //Chequeamos que tenga todos los argumentos necesarios
+    if ( argc < 2 ){
+        fprintf( stderr, "Too few arguments\n" );
+        return EXIT_FAILURE;
+    }
+
+    //agregar para leer desde archivos
 
     setUpPipes();
 
