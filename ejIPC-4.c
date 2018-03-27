@@ -23,12 +23,13 @@ unsigned char inParity = 0, outParity = 0;
 static int calcParity( struct buffer * buff, const int size ) {
     unsigned char b = 0;
     int i;
-    size_t * read_bytes;
+    size_t * read_bytes = 0;
+    uint8_t * ptr;
 
-    buffer_read_ptr( buff, read_bytes );
+    ptr = buffer_read_ptr( buff, read_bytes );
 
     for ( i = 0 ; i < *read_bytes ; i++ ) {
-        b^= buffer_read(buff);    
+        b^= ptr[i] ;    
     }
 
     return b;
@@ -38,7 +39,7 @@ static int handleReadStdIn(struct buffer * buff) {
 
     int bytesRead = 0;
 
-    size_t * bytes;
+    size_t * bytes = 0;
 
     bytesRead = read(STDIN_FILENO, buffer_write_ptr(buff, bytes), *bytes);
 
@@ -62,7 +63,7 @@ static int handleReadPipeFromChild(struct buffer * buff) {
 
     int bytesRead = 0;
 
-    size_t * bytes;
+    size_t * bytes = 0;
 
     // Read response from child
     bytesRead = read(pipeFromChild[0], buffer_write_ptr(buff, bytes), *bytes) ;
@@ -89,7 +90,7 @@ static int handleReadPipeFromChild(struct buffer * buff) {
 
 static void handleWritePipeToChild(struct buffer * buff) {
 
-    size_t * write_bytes;
+    size_t * write_bytes = 0;
 
     if ( write(pipeToChild[1], buffer_read_ptr( buff, write_bytes ), *write_bytes ) > 0 ) {
         printf("Wrote to child: %d bytes\n", ((int)*write_bytes));
@@ -177,7 +178,7 @@ static int startParent() {
         //printf("WTF :\n select: %d\n Pipes: STDIN %d STDOUT %d CHIN %d CHOUT %d \n", n, STDIN_FILENO, STDOUT_FILENO, pipeFromChild[0], pipeToChild[1] );
 
         //handlers por si alguno esta disponible
-        if ( FD_ISSET(STDIN_FILENO, &readSetBackup) ) {
+        if ( FD_ISSET(STDIN_FILENO, &readSet) ) {
 
             // Close unused ends of pipes
             //close(pipeToChild[0]);
@@ -186,7 +187,7 @@ static int startParent() {
             bytesRead = handleReadStdIn(&bin);
         }
 
-        if (FD_ISSET(pipeToChild[1], &writeSetBackup)) {
+        if (FD_ISSET(pipeToChild[1], &writeSet)) {
 
             handleWritePipeToChild(&bin);
 
@@ -194,12 +195,12 @@ static int startParent() {
 
         }
 
-        if (FD_ISSET(pipeFromChild[0], &readSetBackup)) {
+        if (FD_ISSET(pipeFromChild[0], &readSet)) {
 
             handleReadPipeFromChild(&bou);
         }
 
-        if (FD_ISSET(STDOUT_FILENO, &writeSetBackup)) {
+        if (FD_ISSET(STDOUT_FILENO, &writeSet)) {
             // Is it ok ?
             fprintf(stderr, "In parity: %#X\nOut parity: %#X\n", inParity, outParity);
         }
