@@ -11,16 +11,12 @@
 //JUAN
 #include "buffer.h"
 
-#define BUFF_SIZE 256
+static int pipeToChild[2];
+static int pipeFromChild[2];
 
-int pipeToChild[2];
-int pipeFromChild[2];
+static unsigned char inParity = 0, outParity = 0;
 
-char buf[BUFF_SIZE] = "";
-
-unsigned char inParity = 0, outParity = 0;
-
-static int calcParity( struct buffer * buff, const int size ) {
+static int calcParity(struct buffer * buff) {
     unsigned char b = 0;
     int i;
     size_t * read_bytes = 0;
@@ -29,7 +25,7 @@ static int calcParity( struct buffer * buff, const int size ) {
     ptr = buffer_read_ptr( buff, read_bytes );
 
     for ( i = 0 ; i < *read_bytes ; i++ ) {
-        b^= ptr[i] ;    
+        b ^= ptr[i] ;    
     }
 
     return b;
@@ -45,7 +41,7 @@ static int handleReadStdIn(struct buffer * buff) {
 
     if (bytesRead > 0) {
 
-        inParity ^= calcParity(buff, bytesRead);
+        inParity ^= calcParity(buff);
 
     } else {
 
@@ -58,9 +54,6 @@ static int handleReadStdIn(struct buffer * buff) {
 
 static int handleReadPipeFromChild(struct buffer * buff) {
 
-    // Empty buffer
-    // memset(buf, 0, sizeof(buf));
-
     int bytesRead = 0;
 
     size_t * bytes = 0;
@@ -70,7 +63,7 @@ static int handleReadPipeFromChild(struct buffer * buff) {
 
     if (bytesRead > 0) {
 
-        outParity ^= calcParity(buff, bytesRead);
+        outParity ^= calcParity(buff);
 
         fprintf(stderr, "Read from child: %d\n", ((int)*bytes));
 
@@ -144,8 +137,6 @@ static int startParent() {
     struct buffer bin, bou;
     buffer_init(&bin, sizeof(buffin)/sizeof(*buffin), buffin);
     buffer_init(&bou, sizeof(buffout)/sizeof(*buffout), buffout);
-
-    int available = 0;
 
     fd_set readSetBackup = readSet;
     fd_set writeSetBackup = writeSet;
@@ -221,13 +212,15 @@ static int startParent() {
             return 0;
         }
 
-        fd_set readSetBackup = readSet;
-        fd_set writeSetBackup = writeSet;
+        readSetBackup = readSet;
+        writeSetBackup = writeSet;
 
     }
     while ( n != -1 );
 
     wait(NULL);
+
+    return 0;
 
 }
 
@@ -259,7 +252,7 @@ static void setUpPipes() {
     }
 }
 
-// Test with: clear && clang  -Weverything ejIPC.c -o ejIPC && echo -n hola | pv | ./ejIPC "sed s/o/0/g| sed s/a/4/g"
+// Test with: clear && clang -Weverything ejIPC-4.c buffer.c -o ejipc && echo -n hola | pv | ./ejipc "sed s/o/0/g| sed s/a/4/g"
 // Linux GCC : gcc -c ejIPC-4.c buffer.c buffer.h ; gcc -o ejipc ejIPC-4.o buffer.o
 int main(int argc, char** argv) {
 
