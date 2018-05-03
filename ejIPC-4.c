@@ -9,7 +9,6 @@
 #include <assert.h>
 #include "buffer.h"
 
-
 static int pipeToChild[2] = {-1, -1};
 static int pipeFromChild[2] = {-1, -1};
 static int stdinFD = STDIN_FILENO;
@@ -44,7 +43,7 @@ static void handleReadStdIn(struct buffer * buff) {
 
         buffer_write_adv(buff, bytesRead);
 
-        printf("Read from stdin: %s\n", ptr);
+        // printf("Read from stdin: %s\n", ptr);
 
     } else if(bytesRead == 0) {
 
@@ -55,7 +54,10 @@ static void handleReadStdIn(struct buffer * buff) {
 
     } else {
 
-     perror("StdIn read failed");
+    	close(stdinFD);
+    	stdinFD = -1;
+
+    	perror("StdIn read failed");
 
  }
 
@@ -74,8 +76,6 @@ static void handleWriteStdOut(struct buffer * buff) {
     if (bytesWritten > 0) {
 
         buffer_read_adv(buff, bytesWritten);
-
-        printf("Wrote to stdout: %s\n", ptr);
 
     } else if(bytesWritten == 0) {
 
@@ -171,7 +171,6 @@ static int startParent() {
     buffer_init(&bou, sizeof(buffout)/sizeof(*buffout), buffout);
 
     do {
-        fflush(stdout);
 
         int max_fd = 0;
 
@@ -300,8 +299,6 @@ static void setUpPipes() {
     }
 }
 
-// Test with: clear && clang -Weverything ejIPC-4.c buffer.c -o ejipc && echo -n hola | pv | ./ejipc "sed s/o/0/g| sed s/a/4/g"
-// Linux GCC : gcc -c ejIPC-4.c buffer.c buffer.h ; gcc -o ejipc ejIPC-4.o buffer.o
 int main(int argc, char** argv) {
 
     int pid;
