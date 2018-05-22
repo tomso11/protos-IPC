@@ -154,18 +154,15 @@ static void handleWritePipeToChild(struct buffer *buff)
     }
 }
 
-// Source from next function: http://jhshi.me/2013/11/02/use-select-to-monitor-multiple-file-descriptors/index.html#.Wq8xTmaZNQI
-// Add a fd to fd_set, and update max_fd
-static int safeFdSet(int fd, fd_set *fds, int *max_fd)
+static void FDSETWithMax(int fd, fd_set *fds, int *max)
 {
-    assert(max_fd != NULL);
-
     FD_SET(fd, fds);
-    if (fd > *max_fd)
+
+    if (fd > *max)
     {
-        *max_fd = fd;
+        *max = fd;
     }
-    return 0;
+
 }
 
 static int startParent()
@@ -179,7 +176,7 @@ static int startParent()
     int n;
 
     uint8_t buffin[4096] = {0}, buffout[4096] = {0};
-    struct buffer bin, bou;
+    buffer bin, bou;
     buffer_init(&bin, sizeof(buffin) / sizeof(*buffin), buffin);
     buffer_init(&bou, sizeof(buffout) / sizeof(*buffout), buffout);
 
@@ -196,22 +193,22 @@ static int startParent()
         // Nos inscribimos segun las condiciones
         if (stdinFD != -1 && buffer_can_write(&bin))
         {
-            safeFdSet(stdinFD, &readSet, &max_fd);
+            FDSETWithMax(stdinFD, &readSet, &max_fd);
         }
 
         if (pipeFromChild[0] != -1 && buffer_can_write(&bou))
         {
-            safeFdSet(pipeFromChild[0], &readSet, &max_fd);
+            FDSETWithMax(pipeFromChild[0], &readSet, &max_fd);
         }
 
         if (pipeToChild[1] != -1 && buffer_can_read(&bin))
         {
-            safeFdSet(pipeToChild[1], &writeSet, &max_fd);
+            FDSETWithMax(pipeToChild[1], &writeSet, &max_fd);
         }
 
         if (stdoutFD != -1 && buffer_can_read(&bou))
         {
-            safeFdSet(stdoutFD, &writeSet, &max_fd);
+            FDSETWithMax(stdoutFD, &writeSet, &max_fd);
         }
 
         n = select(max_fd + 1, &readSet, &writeSet, NULL, NULL);
