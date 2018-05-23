@@ -9,7 +9,7 @@ clear && clang -fsanitize=address -fno-omit-frame-pointer ejIPC-4.c buffer.c -o 
 ```
 
 ```
-clear && clang -ggdb3 -O0 -std=c99 -fsanitize=address -fno-omit-frame-pointer ejIPC-4.c buffer.c -o ejipc &&
+clear && clang -ggdb3 -O0 -std=c99 -fsanitize=address -fno-omit-frame-pointer -g ejIPC-4.c buffer.c -o ejipc &&
  echo -n hola | pv | ./ejipc "sed s/o/0/g| sed s/a/4/g"
 ```
 
