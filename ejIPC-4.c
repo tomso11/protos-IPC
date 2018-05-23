@@ -134,6 +134,34 @@ static int startParent()
 
     fd_selector selector = NULL;
 
+    struct io_struct *ios_stdin = NULL;
+    ios_stdin = malloc(sizeof(*ios_stdin));
+    memset(ios_stdin, 0x00, sizeof(*ios_stdin));
+    ios_stdin->fd = &stdinFD;
+    ios_stdin->buff = &bin;
+    ios_stdin->par = &inParity;
+
+    struct io_struct *ios_read_from_child = NULL;
+    ios_read_from_child = malloc(sizeof(*ios_read_from_child));
+    memset(ios_read_from_child, 0x00, sizeof(*ios_read_from_child));
+    ios_read_from_child->fd = &pipeFromChild[0];
+    ios_read_from_child->buff = &bou;
+    ios_read_from_child->par = &outParity;
+
+    struct io_struct *ios_write_to_child = NULL;
+    ios_write_to_child = malloc(sizeof(*ios_write_to_child));
+    memset(ios_write_to_child, 0x00, sizeof(*ios_write_to_child));
+    ios_write_to_child->fd = &pipeToChild[1];
+    ios_write_to_child->buff = &bin;
+    ios_write_to_child->par = NULL;
+
+    struct io_struct *ios_stdout = NULL;
+    ios_stdout = malloc(sizeof(*ios_stdout));
+    memset(ios_stdout, 0x00, sizeof(*ios_stdout));
+    ios_stdout->fd = &stdoutFD;
+    ios_stdout->buff = &bou;
+    ios_stdout->par = NULL;
+
     /* Config structure for selector indicating SIGALARM signal. */
     const struct selector_init conf = {
         .signal = SIGALRM,
@@ -204,34 +232,6 @@ static int startParent()
         err_msg = "setting fd to non-blocking";
         goto finally;
     }
-
-    struct io_struct *ios_stdin;
-    ios_stdin = malloc(sizeof(*ios_stdin));
-    memset(ios_stdin, 0x00, sizeof(*ios_stdin));
-    ios_stdin->fd = &stdinFD;
-    ios_stdin->buff = &bin;
-    ios_stdin->par = &inParity;
-
-    struct io_struct *ios_read_from_child;
-    ios_read_from_child = malloc(sizeof(*ios_read_from_child));
-    memset(ios_read_from_child, 0x00, sizeof(*ios_read_from_child));
-    ios_read_from_child->fd = &pipeFromChild[0];
-    ios_read_from_child->buff = &bou;
-    ios_read_from_child->par = &outParity;
-
-    struct io_struct *ios_write_to_child;
-    ios_write_to_child = malloc(sizeof(*ios_write_to_child));
-    memset(ios_write_to_child, 0x00, sizeof(*ios_write_to_child));
-    ios_write_to_child->fd = &pipeToChild[1];
-    ios_write_to_child->buff = &bin;
-    ios_write_to_child->par = NULL;
-
-    struct io_struct *ios_stdout;
-    ios_stdout = malloc(sizeof(*ios_stdout));
-    memset(ios_stdout, 0x00, sizeof(*ios_stdout));
-    ios_stdout->fd = &stdoutFD;
-    ios_stdout->buff = &bou;
-    ios_stdout->par = NULL;
 
     /* Register fds to selector. */
     selector_status ss_read_stdin = selector_register(selector, stdinFD,
@@ -318,6 +318,11 @@ finally:
         selector_destroy(selector);
     }
     selector_close();
+
+    free(ios_stdout);
+    free(ios_stdin);
+    free(ios_write_to_child);
+    free(ios_read_from_child);
 
     wait(NULL);
 
