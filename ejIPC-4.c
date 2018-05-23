@@ -130,7 +130,9 @@ static int startParent()
     buffer_init(&bin, N(buffin), buffin);
     buffer_init(&bou, N(buffout), buffout);
 
-    fd_selector selector;
+    const char *err_msg = NULL;
+
+    fd_selector selector = NULL;
 
     /* Config structure for selector indicating SIGALARM signal. */
     const struct selector_init conf = {
@@ -145,17 +147,16 @@ static int startParent()
     selector_status ss = SELECTOR_SUCCESS;
     if (selector_init(&conf))
     {
-        fprintf(stderr, "Error: initializing selector.");
-        return 1;
+        err_msg = "initializing selector";
+        goto finally;
     }
 
     /* Get new selector with initial fds. */
     selector = selector_new(INITIAL_FDS);
     if (selector == NULL)
     {
-        fprintf(stderr, "Error: creating selector.");
-        selector_close();
-        return 1;
+        err_msg = "creating selector";
+        goto finally;
     }
 
     /* Set fd handlers. */
@@ -182,34 +183,26 @@ static int startParent()
     /* Set fd to non-blocking. */
     if (selector_fd_set_nio(stdinFD) == -1)
     {
-        close(stdinFD);
-        selector_destroy(selector);
-        selector_close();
-        return 1;
+        err_msg = "setting fd to non-blocking";
+        goto finally;
     }
 
     if (selector_fd_set_nio(pipeToChild[1]) == -1)
     {
-        close(pipeToChild[1]);
-        selector_destroy(selector);
-        selector_close();
-        return 1;
+        err_msg = "setting fd to non-blocking";
+        goto finally;
     }
 
     if (selector_fd_set_nio(pipeFromChild[0]) == -1)
     {
-        close(pipeFromChild[0]);
-        selector_destroy(selector);
-        selector_close();
-        return 1;
+        err_msg = "setting fd to non-blocking";
+        goto finally;
     }
 
     if (selector_fd_set_nio(stdoutFD) == -1)
     {
-        close(stdoutFD);
-        selector_destroy(selector);
-        selector_close();
-        return 1;
+        err_msg = "setting fd to non-blocking";
+        goto finally;
     }
 
     struct io_struct *ios_stdin;
@@ -257,10 +250,8 @@ static int startParent()
 
     if (ss_read_stdin != SELECTOR_SUCCESS || ss_write_pipe_to_child != SELECTOR_SUCCESS || ss_read_pipe_from_child != SELECTOR_SUCCESS || ss_write_stdout != SELECTOR_SUCCESS)
     {
-        fprintf(stderr, "Error: registering fd.\n");
-        selector_destroy(selector);
-        selector_close();
-        return 1;
+        err_msg = "egistering fd";
+        goto finally;
     }
 
     for (; !done;)
@@ -307,24 +298,30 @@ static int startParent()
         }
     }
 
+    int ret = 0;
+finally:
     if (ss != SELECTOR_SUCCESS)
     {
-        fprintf(stderr, "Error: selector_select. %s\n",
+        fprintf(stderr, "%s: %s\n", (err_msg == NULL) ? "" : err_msg,
                 ss == SELECTOR_IO
                     ? strerror(errno)
                     : selector_error(ss));
-
-        selector_destroy(selector);
-        selector_close();
-        return 1;
+        ret = 2;
     }
-
-    selector_destroy(selector);
+    else if (err_msg)
+    {
+        perror(err_msg);
+        ret = 1;
+    }
+    if (selector != NULL)
+    {
+        selector_destroy(selector);
+    }
     selector_close();
 
     wait(NULL);
 
-    return 0;
+    return ret;
 }
 
 static void startChild(char *command)
