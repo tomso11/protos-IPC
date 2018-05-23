@@ -96,6 +96,7 @@ int dowrite(int *fd, struct buffer *buff, uint8_t *par)
             parity(ptr, n, par);
         }
         buffer_read_adv(buff, n);
+
     }
 
     return ret;
@@ -146,7 +147,7 @@ static int startParent()
     memset(ios_read_from_child, 0x00, sizeof(*ios_read_from_child));
     ios_read_from_child->fd = &pipeFromChild[0];
     ios_read_from_child->buff = &bou;
-    ios_read_from_child->par = &outParity;
+    ios_read_from_child->par = NULL;
 
     struct io_struct *ios_write_to_child = NULL;
     ios_write_to_child = malloc(sizeof(*ios_write_to_child));
@@ -160,7 +161,7 @@ static int startParent()
     memset(ios_stdout, 0x00, sizeof(*ios_stdout));
     ios_stdout->fd = &stdoutFD;
     ios_stdout->buff = &bou;
-    ios_stdout->par = NULL;
+    ios_stdout->par = &outParity;
 
     /* Config structure for selector indicating SIGALARM signal. */
     const struct selector_init conf = {
@@ -250,7 +251,7 @@ static int startParent()
 
     if (ss_read_stdin != SELECTOR_SUCCESS || ss_write_pipe_to_child != SELECTOR_SUCCESS || ss_read_pipe_from_child != SELECTOR_SUCCESS || ss_write_stdout != SELECTOR_SUCCESS)
     {
-        err_msg = "egistering fd";
+        err_msg = "registering fd";
         goto finally;
     }
 
@@ -293,7 +294,8 @@ static int startParent()
         if (stdinFD == -1 && pipeFromChild[0] == -1 && pipeToChild[1] == -1 && stdoutFD == -1)
         {
 
-            fprintf(stderr, "In parity: %#X\nOut parity: %#X\n", inParity, outParity);
+            fprintf(stderr, "in  parity: 0x%02X\n", inParity);
+            fprintf(stderr, "out parity: 0x%02X\n", outParity);
             break;
         }
     }
